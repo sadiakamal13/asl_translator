@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ASL Interpreter</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07070d;--surface:#10101a;--surface2:#181828;--border:#2a2a45;
+  --accent:#5b6af5;--accent2:#9b59f5;--green:#3cffa0;--amber:#ffb830;
+  --red:#ff4f6a;--text:#e8e8f5;--muted:#6a6a8a;--radius:12px;
+  --mono:"Courier New",monospace;--sans:system-ui,sans-serif;
+}
+html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:14px;overflow:hidden;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-rows:52px 1fr;grid-template-columns:1fr 380px;height:100vh}
+.titlebar{grid-column:1/-1;display:flex;align-items:center;padding:0 20px 0 80px;
+  background:var(--surface);border-bottom:1px solid var(--border);-webkit-app-region:drag;gap:12px}
+.logo{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.titlebar h1{font-size:14px;font-weight:600}
+.titlebar .sub{font-size:12px;color:var(--muted);margin-left:4px}
+.spacer{flex:1}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .4s}
+.dot.live{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.thinking{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.dot.error{background:var(--red)}
+#status-text{font-size:12px;color:var(--muted)}
+
+.left{display:flex;flex-direction:column;gap:12px;padding:16px 12px 16px 16px;
+  overflow:hidden;border-right:1px solid var(--border)}
+.cam-box{position:relative;border-radius:var(--radius);overflow:hidden;
+  background:#000;border:1px solid var(--border);aspect-ratio:4/3;flex:0 0 auto}
+#cam-img{width:100%;height:100%;object-fit:cover;display:block}
+.cam-badges{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+  backdrop-filter:blur(10px);background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,.12)}
+.badge.hand{border-color:var(--accent);color:var(--accent)}
+.badge.face{border-color:var(--green);color:var(--green)}
+.sign-overlay{position:absolute;bottom:0;left:0;right:0;padding:12px 16px;
+  background:linear-gradient(to top,rgba(0,0,0,.85),transparent);display:flex;align-items:flex-end;gap:10px}
+#sign-char{font-family:var(--mono);font-size:42px;font-weight:900;color:#fff;
+  text-shadow:0 0 20px rgba(91,106,245,.8);line-height:1}
+#sign-label{font-size:13px;color:var(--muted);padding-bottom:4px}
+
+.sec-label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px}
+#seq-strip{display:flex;gap:6px;flex-wrap:wrap;min-height:44px;padding:8px 10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.chip{display:flex;flex-direction:column;align-items:center;padding:4px 10px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  animation:chipIn .18s ease}
+.chip .cs{font-family:var(--mono);font-size:16px;font-weight:700}
+.chip .cm{font-size:9px;color:var(--accent);margin-top:1px}
+.chip.q{border-color:var(--accent);background:rgba(91,106,245,.08)}
+.chip.big{border-color:var(--amber);background:rgba(255,184,48,.08)}
+@keyframes chipIn{from{opacity:0;transform:scale(.8) translateY(4px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+#expr-panel{display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px 10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.epill{padding:3px 10px;border-radius:20px;font-size:11px;
+  background:rgba(60,255,160,.1);border:1px solid rgba(60,255,160,.3);color:var(--green);animation:chipIn .18s ease}
+
+.right{display:flex;flex-direction:column;padding:16px;gap:14px;overflow-y:auto}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.card-hd{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:1px solid var(--border)}
+.card-hd .icon{font-size:16px}
+.card-hd .ttl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.card-hd .conf{margin-left:auto;font-size:11px;font-family:var(--mono);padding:2px 8px;
+  border-radius:10px;background:rgba(91,106,245,.15);color:var(--accent);border:1px solid rgba(91,106,245,.3)}
+.card-body{padding:14px}
+.gloss{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;letter-spacing:.08em}
+.gloss span{color:var(--text)}
+#trans-text{font-size:20px;font-weight:500;line-height:1.55;color:var(--text);min-height:60px;word-break:break-word}
+#trans-text.empty{color:var(--muted);font-size:14px;font-style:italic}
+.ai-mod{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
+.notes{margin-top:10px;font-size:11px;color:var(--muted);font-style:italic;
+  padding-top:10px;border-top:1px solid var(--border)}
+.dots{display:inline-flex;gap:4px;align-items:center}
+.dots span{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:bounce 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,80%,100%{transform:scale(.7);opacity:.5}40%{transform:scale(1);opacity:1}}
+
+.legend-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.leg-ttl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.leg-item{display:flex;gap:10px;align-items:flex-start;margin-bottom:7px;font-size:12px}
+.leg-key{font-family:var(--mono);font-weight:700;min-width:52px;color:var(--text);flex-shrink:0}
+.leg-desc{color:var(--muted);line-height:1.4}
+
+.hist-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;flex:1}
+#hist-list{padding:8px;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto}
+.hi{padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);animation:chipIn .2s ease}
+.hi .hg{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:4px}
+.hi .ht{font-size:13px;line-height:1.45}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="logo">🤟</div>
+    <h1>ASL Interpreter</h1>
+    <span class="sub">— real-time sign language translator</span>
+    <div class="spacer"></div>
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Initialising…</span>
+  </header>
+
+  <section class="left">
+    <div class="cam-box">
+      <img id="cam-img" src="" alt="Camera loading...">
+      <div class="cam-badges">
+        <span class="badge hand" id="badge-hand" style="display:none"></span>
+        <span class="badge face" id="badge-face" style="display:none"></span>
+      </div>
+      <div class="sign-overlay">
+        <div id="sign-char">—</div>
+        <div id="sign-label">waiting for sign…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label">Sign sequence</div>
+      <div id="seq-strip"><span id="seq-placeholder" style="color:var(--muted);font-size:12px;align-self:center;padding:0 2px">Signs will appear here…</span></div>
+    </div>
+
+    <div>
+      <div class="sec-label">Facial expressions</div>
+      <div id="expr-panel"><span id="expr-placeholder" style="color:var(--muted);font-size:12px;align-self:center">No expressions detected</span></div>
+    </div>
+  </section>
+
+  <aside class="right">
+    <div class="card">
+      <div class="card-hd">
+        <span class="icon">🌐</span>
+        <span class="ttl">English Translation</span>
+        <span class="conf" id="conf" style="display:none"></span>
+      </div>
+      <div class="card-body">
+        <div class="gloss" id="gloss" style="display:none">GLOSS: <span id="gloss-txt"></span></div>
+        <div id="trans-text" class="empty">Make a sign in front of your camera.<br>Pause 2 seconds to trigger translation.</div>
+        <div class="notes" id="notes" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="legend-card">
+      <div class="leg-ttl">How to read translations</div>
+      <div class="leg-item">
+        <div class="leg-key" style="text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px">word</div>
+        <div class="leg-desc">Word added/changed by AI to make English flow naturally</div>
+      </div>
+      <div class="leg-item"><div class="leg-key" style="color:var(--green)">green pill</div><div class="leg-desc">Facial expression detected</div></div>
+      <div class="leg-item"><div class="leg-key" style="color:var(--accent)">blue chip</div><div class="leg-desc">Yes/no question marker (raised brows)</div></div>
+      <div class="leg-item"><div class="leg-key" style="color:var(--amber)">amber chip</div><div class="leg-desc">Intensity modifier (puffed cheeks)</div></div>
+    </div>
+
+    <div class="hist-card">
+      <div class="card-hd" style="border-bottom:1px solid var(--border)">
+        <span class="icon">📋</span><span class="ttl">History</span>
+        <button onclick="clearHist()" style="margin-left:auto;background:none;border:1px solid var(--border);
+          color:var(--muted);padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px">Clear</button>
+      </div>
+      <div id="hist-list"><span style="color:var(--muted);font-size:12px;padding:6px 4px">No translations yet</span></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const dot        = document.getElementById("dot");
+const statusTxt  = document.getElementById("status-text");
+const camImg     = document.getElementById("cam-img");
+const badgeHand  = document.getElementById("badge-hand");
+const badgeFace  = document.getElementById("badge-face");
+const signChar   = document.getElementById("sign-char");
+const signLabel  = document.getElementById("sign-label");
+const seqStrip   = document.getElementById("seq-strip");
+const seqPH      = document.getElementById("seq-placeholder");
+const exprPanel  = document.getElementById("expr-panel");
+const transTxt   = document.getElementById("trans-text");
+const glossEl    = document.getElementById("gloss");
+const glossTxt   = document.getElementById("gloss-txt");
+const notesEl    = document.getElementById("notes");
+const confEl     = document.getElementById("conf");
+const histList   = document.getElementById("hist-list");
+
+function setStatus(cls, msg){
+  dot.className="dot "+(cls||"");
+  statusTxt.textContent=msg;
+}
+
+function renderTrans(text, mods){
+  if(!text){transTxt.innerHTML="…";return;}
+  transTxt.className="";
+  transTxt.innerHTML=text.split(/(\s+)/).map(tok=>{
+    const clean=tok.replace(/[^a-zA-Z']/g,"").toLowerCase();
+    return (mods||[]).some(w=>w.toLowerCase()===clean)&&clean.length
+      ? `<span class="ai-mod">${tok}</span>` : tok;
+  }).join("");
+}
+
+function addToHist(ev){
+  const ph=histList.querySelector("span");
+  if(ph) ph.remove();
+  const d=document.createElement("div");
+  d.className="hi";
+  const html=ev.translation.split(/(\s+)/).map(t=>{
+    const c=t.replace(/[^a-zA-Z']/g,"").toLowerCase();
+    return (ev.modified||[]).some(w=>w.toLowerCase()===c)&&c.length
+      ? `<span class="ai-mod">${t}</span>`:t;
+  }).join("");
+  d.innerHTML=`<div class="hg">${ev.raw_gloss||"—"} <span style="float:right">${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span></div><div class="ht">${html}</div>`;
+  histList.insertBefore(d,histList.firstChild);
+  while(histList.children.length>20) histList.removeChild(histList.lastChild);
+}
+
+function clearHist(){histList.innerHTML='<span style="color:var(--muted);font-size:12px;padding:6px 4px">No translations yet</span>';}
+
+// ── Backend events ────────────────────────────────────────────────────────────
+window.asl.onBackendEvent(ev=>{
+
+  if(ev.type==="status"){
+    setStatus("live", ev.message);
+    return;
+  }
+
+  if(ev.type==="error"){
+    setStatus("error", ev.message);
+    return;
+  }
+
+  if(ev.type==="frame"){
+    setStatus("live","Live");
+
+    // Update camera image
+    if(ev.image){
+      camImg.src="data:image/jpeg;base64,"+ev.image;
+    }
+
+    // Hand badge
+    if(ev.hands&&ev.hands.length>0){
+      const g=ev.hands[0].gesture;
+      badgeHand.textContent="✋ "+ev.hands[0].hand+": "+g;
+      badgeHand.style.display="inline";
+      signChar.textContent=g.length<=4?g:g.slice(0,4);
+      signLabel.textContent=g;
+    } else {
+      badgeHand.style.display="none";
+      signChar.textContent="—";
+      signLabel.textContent="no hands detected";
+    }
+
+    // Face expressions
+    const ex=ev.face?ev.face.expressions:[];
+    if(ex.length>0){
+      badgeFace.textContent="😐 "+ex[0];
+      badgeFace.style.display="inline";
+      exprPanel.innerHTML=ex.map(e=>`<span class="epill">${e.replace(/_/g," ")}</span>`).join("");
+    } else {
+      badgeFace.style.display="none";
+      exprPanel.innerHTML='<span id="expr-placeholder" style="color:var(--muted);font-size:12px;align-self:center">No expressions detected</span>';
+    }
+    return;
+  }
+
+  if(ev.type==="sign_added"){
+    if(seqPH) seqPH.remove();
+    const seq=ev.sequence;
+    const latest=seq[seq.length-1];
+    const chip=document.createElement("div");
+    const mods=latest.modifiers||[];
+    chip.className="chip"+(mods.some(m=>m.includes("question"))?" q":mods.some(m=>m.includes("large")||m.includes("intensity"))?" big":"");
+    chip.innerHTML=`<span class="cs">${latest.sign}</span>`;
+    seqStrip.appendChild(chip);
+    return;
+  }
+
+  if(ev.type==="translate_request"){
+    setStatus("thinking","Translating…");
+    transTxt.className="";
+    transTxt.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';
+    glossEl.style.display="none";
+    notesEl.style.display="none";
+    confEl.style.display="none";
+    seqStrip.innerHTML='<span id="seq-placeholder" style="color:var(--muted);font-size:12px;align-self:center;padding:0 2px">Signs will appear here…</span>';
+    return;
+  }
+
+  if(ev.type==="translation"){
+    setStatus("live","Live");
+    renderTrans(ev.translation, ev.modified||[]);
+    if(ev.raw_gloss){glossTxt.textContent=ev.raw_gloss;glossEl.style.display="block";}
+    if(typeof ev.confidence==="number"){
+      const pct=Math.round(ev.confidence*100);
+      confEl.textContent=pct+"% conf.";
+      confEl.style.display="inline";
+    }
+    if(ev.notes){notesEl.textContent="ℹ️ "+ev.notes;notesEl.style.display="block";}
+    else notesEl.style.display="none";
+    addToHist(ev);
+    return;
+  }
+});
+
+setStatus("","Waiting for camera…");
+</script>
+</body>
+</html>

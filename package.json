@@ -1,0 +1,29 @@
+{
+  "name": "asl-interpreter",
+  "version": "1.0.0",
+  "description": "Real-time ASL interpreter with facial expression grammar analysis",
+  "main": "frontend/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "electron": "^43.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.asl.interpreter",
+    "productName": "ASL Interpreter",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "frontend/**/*",
+      "backend/**/*",
+      "!backend/__pycache__"
+    ]
+  }
+}
